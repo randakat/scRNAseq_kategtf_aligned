@@ -1,0 +1,339 @@
+---
+title: "scRNAseq_kategtf_aligned"
+author: "Kate Randall"
+date: "2025-05-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load packages
+
+
+```{r}
+library(plyr)
+library(tidyverse)
+library(ggplot2)
+library(ggpackets)
+library(patchwork)
+library(glmGamPoi)
+library(presto)
+library(BPCells)
+library(RANN)
+library(Rtsne)
+library(irlba)
+library(png)
+library(qqconf)
+library(lmtest)
+library(metap)
+library(multtest)
+library(mime)
+library(ellipsis)
+library(lazyeval)
+library(stringi)
+library(reshape2)
+library(polyclip)
+library(goftest)
+library(RColorBrewer)
+library(viridis)
+library(beepr)
+library(SeuratObject)
+library(Seurat)
+#library(ggseurat)
+library(ggpackets)
+library(sctransform)
+library(scCustomize)
+
+# set seed for reproducibility
+set.seed(123456)
+
+# set assay version to Seurat v3
+#options(Seurat.object.assay.version = "v3")
+
+```
+
+
+# Import scRNA-seq dataset
+
+
+```{Import 10X scRNA-seq dataset}
+
+# 0hr timepoint
+hr0.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+
+hr0 <- CreateSeuratObject(counts = hr0.data, assay = "RNA")
+class(hr0[["RNA"]])
+
+# add metadata column "timepoint"
+hr0[["timepoint"]] <- "hr0"
+
+# check metadata
+hr0_metadata <- hr0[[]]
+(colnames(hr0_metadata))
+head(hr0_metadata)
+
+# 3hr timepoint
+hr3.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr3 <- CreateSeuratObject(counts = hr3.data)
+class(hr3[["RNA"]])
+hr3[["timepoint"]] <- "hr3"
+
+# 6 hr timepoint
+hr6.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr6 <- CreateSeuratObject(counts = hr6.data)
+class(hr6[["RNA"]])
+hr6[["timepoint"]] <- "hr6"
+
+# 12hr timepoint
+hr12.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr12 <- CreateSeuratObject(counts = hr12.data)
+class(hr12[["RNA"]])
+hr12[["timepoint"]] <- "hr12"
+
+# 18hr timepoint
+hr18.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr18 <- CreateSeuratObject(counts = hr18.data)
+class(hr18[["RNA"]])
+hr18[["timepoint"]] <- "hr18"
+
+# 24hr timepoint
+hr24.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr24 <- CreateSeuratObject(counts = hr24.data)
+class(hr24[["RNA"]])
+hr24[["timepoint"]] <- "hr24"
+
+# 36hr timepoint
+hr36.data <- Read10X(data.dir = "//home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr36 <- CreateSeuratObject(counts = hr36.data)
+class(hr36[["RNA"]])
+hr36[["timepoint"]] <- "hr36"
+
+# SAVE & LOAD
+save(hr0, hr3, hr6, hr12, hr18, hr24, hr36, file="hr.meta.kg.RData")
+#load(file = "hr.meta.kg.RData")
+
+```
+
+
+# Custom plot theme
+
+
+```{r}
+
+theme <- ggpacket() +
+  theme(text=element_text(size=18, color="black"),
+        rect=(element_blank()),
+        axis.line=element_line(),
+        axis.text=element_text(size=14, color="black"),
+        plot.title=element_text(hjust=0.5, face = "bold", size = 22))
+
+```
+
+
+
+# Quality Control Metrics
+
+
+
+## Merge timepoints (for QC only)
+
+```{Merge timepoints - QUICKLY with multicore!}
+
+# in Terminal window!
+
+R
+
+# load packages and inputs as above
+library(future)
+library(Seurat)
+
+load(file = "hr.meta.RData")
+
+
+# REMOVE LATER force v3 assay (instead of v5)
+#options(Seurat.object.assay.version = "v3")
+
+# set up for parallelization 
+plan("multicore", workers = parallel::detectCores())
+options(future.globals.maxSize = 100 * 1024^3) # use <100 GB RAM
+
+# log compute time
+start_time <- Sys.time()
+
+# create merged object (multicore)
+hr.merged.kg <- value(future({
+  merge(x = hr0,
+        y = list(hr3, hr6, hr12, hr18, hr24, hr36),
+        add.cell.ids = c("0hrs", "3hrs", "6hrs", "12hrs", "18hrs", "24hrs", "36hrs"))
+}))
+
+save(hr.merged.kg, file = "hr.merged.kg.RData")
+
+# report compute time
+end_time <- Sys.time()
+cat("Merge compute time:", end_time - start_time)
+
+```
+
+## Raw data wrangling
+
+```{r}
+# load back into RStudio
+load(file = "hr.merged.kg.RData")
+
+# clean up env
+rm(hr0, hr0_metadata, hr0.data, hr3, hr3.data, hr6, hr6.data, hr12, hr12.data, hr18, hr18.data, hr24, hr24.data, hr36, hr36.data)
+
+
+raw.metadata <- hr.merged.kg@meta.data
+head(raw.metadata)
+unique(raw.metadata$timepoint)
+
+#force chronological timepoint order (default is alphanumeric)
+raw.metadata$timepoint <- factor(raw.metadata$timepoint,
+                             levels = c("hr0", "hr3", "hr6", "hr12", "hr18", "hr24", "hr36"))
+
+# copy cell ids into new column "timepoint"
+hr.merged.kg[["timepoint"]] <- sapply(Cells(hr.merged.kg), function(x) strsplit(x, "_")[[1]][[1]])
+unique(hr.merged.kg@meta.data$timepoint)
+
+
+# rename columns 
+raw.metadata <- hr.merged.kg@meta.data
+raw.metadata$cells <- rownames(raw.metadata)
+raw.metadata <- raw.metadata %>%
+  dplyr::rename(nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+hr.merged.kg@meta.data <- raw.metadata
+View(hr.merged.kg@meta.data)
+
+
+# SAVE & LOAD          
+save(hr.merged.kg, file = "hr.merged.kg.RData")
+#load(file = "hr.merged.kg.RData")
+```
+
+
+## View raw QC data
+
+```{r}
+
+######################## nCells, nUMI (aka nCount), & nGene (aka nFeature) #################################
+ 
+#raw data before normalization, scaling, or filtration!
+
+
+# plot (bar) nCells per timepoint
+nCells_raw <- raw.metadata %>%
+  ggplot(aes(x= timepoint, fill= timepoint)) +
+  geom_bar() +
+  theme() +
+  scale_y_continuous(expand=(c(0,0))) +
+  scale_fill_viridis_d() +
+  ggtitle("nCells (raw)")
+nCells_raw
+ggsave("nCells_raw", plot = nCells_raw, device = "pdf")
+
+
+# plot nUMIs per cell (density)
+UMIdensity_raw <- metadata %>% 
+  ggplot(aes(x=nUMI, fill= timepoint, group = timepoint)) + 
+  geom_density(alpha = 0.4, fill = "gray10") + 
+  krplot() +
+  scale_x_continuous(labels = scales::comma, 
+                     trans = "log10", 
+                     limits = c(100,100000), 
+                     n.breaks = 8) +
+  scale_y_continuous(expand=c(0,0)) +
+  ylab("log10 cell density") +
+  ggtitle("UMIs per cell")
+# + geom_vline(xintercept = 650, color = "red")
+UMIdensity_raw
+ggsave("UMI_density_raw", plot = UMIdensity_raw, device = "pdf")
+
+
+# plot nGenes per cell (density)
+genedensity_raw <- metadata %>% 
+  ggplot(aes(x=nGene, fill= timepoint, group = timepoint)) + 
+  geom_density(alpha = 0.4, fill = "gray10") +
+  krplot() +
+  scale_x_continuous(labels = scales::comma, 
+                     trans = "log10", 
+                     limits = c(100,100000), 
+                     n.breaks = 8,
+                     expand=c(0,0)) +
+  scale_y_continuous(limits = c(0,1.4),
+                     n.breaks = 8,
+                     expand=c(0,0)) +
+  ggtitle("nGenes per cell") +
+  # + geom_vline(xintercept = 250) +
+  ylab("log10 cell density")
+genedensity_gray
+ggsave("nGenepercell_raw", plot = genedensity_raw, device = "pdf")
+
+
+# plot nGene vs nUMI (scatter)
+genexumi <- metadata %>% 
+  ggplot(aes(x=nUMI, y=nGene)) + 
+  geom_point(alpha = 0.3) + 
+  krplot() +
+  stat_smooth(method=lm) +
+  scale_x_log10(labels = scales::comma,
+                     n.breaks = 8,
+                     limits = c(650,100000),
+                     expand=c(0,0)) +
+  scale_y_log10(labels = scales::comma,
+                expand=c(0,0)) +
+  ggtitle("nGene per nUMI")
+genexumi
+ggsave("genexumi", plot = genexumi, device = "pdf")
+
+######################## Novelty and complexity scores #################################
+
+# novelty score (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+hr.merged.kg$log10GenesPerUMI <- log10(hr.merged.kg$nGene_RNA) / log10(hr.merged.kg$nUMI_RNA)
+
+
+#Cell complexity scores (# genes detected per UMI)
+complexity <- metadata %>%
+  ggplot(aes(x=log10GenesPerUMI, fill=timepoint)) +
+  geom_density(alpha = 0.4) +
+  krplot() +
+  scale_x_continuous(expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0)) +
+  ggtitle("Complexity score") +
+  geom_vline(xintercept = 0.8) +
+  ylab("Cell density")
+complexity
+ggsave("complexity", plot = complexity, device = "pdf")
+
+
+
+######################## mitochondrial and ribosomal reads #################################
+
+#Define mito genes (from Wurtzel 2015)
+mito.genes <- c("h1SMnG0035607", "h1SMcG0023143", "h1SMcG0023145", "h1SMcG0023143", "h1SMcG0023145", "h1SMcG0023144", "h1SMnG0035609", "h1SMcG0023142")
+
+#Define rRNA
+ribo.genes <- c("h1SMnG0035145", "h1SMnG0035616")
+
+hr.merged <-Add_Mito_Ribo(object = hr.merged, species = "other", mito_features = mito.genes, ribo_features = ribo.genes)
+
+```
+
+## Remove empty droplets
+
+```{r}
+# first, just filter out low nCount_RNA "cells"
+hr.merged.kg <- subset(hr.merged.kg, subset = nCount_RNA > 200)
+
+# run Cellbender (see python scripts) and import results
+# ERROR: cant pickle weakrefs 
+
+# compare Cellbender results to nCount_RNA filter
+# would go here if I could get Cellbender to work
+
+```
+
