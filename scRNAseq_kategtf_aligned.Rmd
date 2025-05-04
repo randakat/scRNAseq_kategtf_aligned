@@ -149,7 +149,7 @@ R
 library(future)
 library(Seurat)
 
-load(file = "hr.meta.RData")
+load(file = "hr.meta.kg.RData")
 
 
 # REMOVE LATER force v3 assay (instead of v5)
@@ -224,7 +224,6 @@ save(hr.merged.kg, file = "hr.merged.kg.RData")
  
 #raw data before normalization, scaling, or filtration!
 
-
 # plot (bar) nCells per timepoint
 nCells_raw <- raw.metadata %>%
   ggplot(aes(x= timepoint, fill= timepoint)) +
@@ -275,7 +274,7 @@ ggsave("nGenepercell_raw", plot = genedensity_raw, device = "pdf")
 
 
 # plot nGene vs nUMI (scatter)
-genexumi <- metadata %>% 
+genexumi_raw <- raw.metadata %>% 
   ggplot(aes(x=nUMI, y=nGene)) + 
   geom_point(alpha = 0.3) + 
   krplot() +
@@ -287,16 +286,17 @@ genexumi <- metadata %>%
   scale_y_log10(labels = scales::comma,
                 expand=c(0,0)) +
   ggtitle("nGene per nUMI")
-genexumi
-ggsave("genexumi", plot = genexumi, device = "pdf")
+genexumi_raw
+ggsave("genexumi_raw", plot = genexumi_raw, device = "pdf")
 
-######################## Novelty and complexity scores #################################
+######################## Complexity scores #################################
 
-# novelty score (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
-hr.merged.kg$log10GenesPerUMI <- log10(hr.merged.kg$nGene_RNA) / log10(hr.merged.kg$nUMI_RNA)
+# Complexity score (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+hr.merged.kg$log10GenesPerUMI <- log10(hr.merged.kg$nGene) / log10(hr.merged.kg$nUMI)
 
 
-#Cell complexity scores (# genes detected per UMI)
+# complexity scores (# genes detected per UMI)
+
 complexity <- metadata %>%
   ggplot(aes(x=log10GenesPerUMI, fill=timepoint)) +
   geom_density(alpha = 0.4) +
