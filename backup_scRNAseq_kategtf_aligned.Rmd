@@ -1,0 +1,718 @@
+---
+title: "scRNAseq_kategtf_aligned"
+author: "Kate Randall"
+date: "2025-05-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load packages
+
+
+```{r}
+library(plyr)
+library(tidyverse)
+library(svglite)
+library(ggplot2)
+library(ggpackets)
+library(patchwork)
+library(glmGamPoi)
+library(presto)
+library(BPCells)
+library(RANN)
+library(Rtsne)
+library(irlba)
+library(png)
+library(qqconf)
+library(lmtest)
+library(metap)
+library(multtest)
+library(mime)
+library(ellipsis)
+library(lazyeval)
+library(stringi)
+library(reshape2)
+library(polyclip)
+library(goftest)
+library(RColorBrewer)
+library(viridis)
+library(beepr)
+library(SeuratObject)
+library(Seurat)
+#library(ggseurat)
+library(ggpackets)
+library(sctransform)
+library(scCustomize)
+
+# set seed for reproducibility
+set.seed(123456)
+
+# set assay version to Seurat v3
+#options(Seurat.object.assay.version = "v3")
+
+```
+
+
+# Import scRNA-seq dataset
+
+
+```{Import 10X scRNA-seq dataset}
+
+# 0hr timepoint
+hr0.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+
+hr0 <- CreateSeuratObject(counts = hr0.data, assay = "RNA")
+class(hr0[["RNA"]])
+
+# add metadata column "timepoint"
+hr0[["timepoint"]] <- "hr0"
+
+# check metadata
+hr0_metadata <- hr0[[]]
+(colnames(hr0_metadata))
+head(hr0_metadata)
+
+# 3hr timepoint
+hr3.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr3 <- CreateSeuratObject(counts = hr3.data)
+class(hr3[["RNA"]])
+hr3[["timepoint"]] <- "hr3"
+
+# 6 hr timepoint
+hr6.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr6 <- CreateSeuratObject(counts = hr6.data)
+class(hr6[["RNA"]])
+hr6[["timepoint"]] <- "hr6"
+
+# 12hr timepoint
+hr12.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr12 <- CreateSeuratObject(counts = hr12.data)
+class(hr12[["RNA"]])
+hr12[["timepoint"]] <- "hr12"
+
+# 18hr timepoint
+hr18.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr18 <- CreateSeuratObject(counts = hr18.data)
+class(hr18[["RNA"]])
+hr18[["timepoint"]] <- "hr18"
+
+# 24hr timepoint
+hr24.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr24 <- CreateSeuratObject(counts = hr24.data)
+class(hr24[["RNA"]])
+hr24[["timepoint"]] <- "hr24"
+
+# 36hr timepoint
+hr36.data <- Read10X(data.dir = "//home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr36 <- CreateSeuratObject(counts = hr36.data)
+class(hr36[["RNA"]])
+hr36[["timepoint"]] <- "hr36"
+
+# SAVE & LOAD
+save(hr0, hr3, hr6, hr12, hr18, hr24, hr36, file="hr.meta.kg.RData")
+#load(file = "hr.meta.kg.RData")
+
+```
+
+
+# Custom plot theme
+
+
+```{r}
+
+theme <- ggpacket() +
+  theme(text=element_text(size=18, color="black"),
+        rect=(element_blank()),
+        axis.line=element_line(),
+        axis.text=element_text(size=14, color="black"),
+        plot.title=element_text(hjust=0.5, face = "bold", size = 22))
+
+```
+
+
+
+# Quality Control Metrics
+
+
+
+## Merge timepoints (for QC only)
+
+```{Merge timepoints - QUICKLY with multicore!}
+
+# in Terminal window!
+
+R
+
+# load packages and inputs as above
+library(future)
+library(Seurat)
+
+load(file = "hr.meta.kg.RData")
+
+
+# REMOVE LATER force v3 assay (instead of v5)
+#options(Seurat.object.assay.version = "v3")
+
+# set up for parallelization 
+plan("multicore", workers = parallel::detectCores())
+options(future.globals.maxSize = 100 * 1024^3) # use <100 GB RAM
+
+# log compute time
+start_time <- Sys.time()
+
+# create merged object (multicore)
+hr.merged.kg <- value(future({
+  merge(x = hr0,
+        y = list(hr3, hr6, hr12, hr18, hr24, hr36),
+        add.cell.ids = c("0hrs", "3hrs", "6hrs", "12hrs", "18hrs", "24hrs", "36hrs"))
+}))
+
+save(hr.merged.kg, file = "hr.merged.kg.RData")
+
+# report compute time
+end_time <- Sys.time()
+cat("Merge compute time:", end_time - start_time)
+
+```
+
+## Raw data wrangling
+
+```{r}
+# load back into RStudio
+load(file = "hr.merged.kg.RData")
+
+# clean up env
+rm(hr0, hr0_metadata, hr0.data, hr3, hr3.data, hr6, hr6.data, hr12, hr12.data, hr18, hr18.data, hr24, hr24.data, hr36, hr36.data)
+
+
+raw.metadata <- hr.merged.kg@meta.data
+head(raw.metadata)
+unique(raw.metadata$timepoint)
+
+#force chronological timepoint order (default is alphanumeric)
+raw.metadata$timepoint <- factor(raw.metadata$timepoint,
+                             levels = c("hr0", "hr3", "hr6", "hr12", "hr18", "hr24", "hr36"))
+
+# copy cell ids into new column "timepoint"
+hr.merged.kg[["timepoint"]] <- sapply(Cells(hr.merged.kg), function(x) strsplit(x, "_")[[1]][[1]])
+unique(hr.merged.kg@meta.data$timepoint)
+
+
+# rename columns 
+raw.metadata <- hr.merged.kg@meta.data
+raw.metadata$cells <- rownames(raw.metadata)
+raw.metadata <- raw.metadata %>%
+  dplyr::rename(nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+hr.merged.kg@meta.data <- raw.metadata
+View(hr.merged.kg@meta.data)
+
+
+# SAVE & LOAD          
+save(hr.merged.kg, file = "hr.merged.kg.RData")
+#load(file = "hr.merged.kg.RData")
+```
+
+
+## View raw QC data
+
+```{r}
+
+######################## nCells, nUMI (aka nCount), & nGene (aka nFeature) #################################
+ 
+#raw data before normalization, scaling, or filtration!
+
+# plot (bar) nCells per timepoint
+nCells_raw <- raw.metadata %>%
+  ggplot(aes(x= timepoint, fill= timepoint)) +
+  geom_bar() +
+#  theme() +
+  scale_y_continuous(expand=(c(0,0))) +
+  scale_fill_viridis_d() +
+  ggtitle("nCells (raw)")
+nCells_raw
+ggsave("nCells_raw", plot = nCells_raw, device = "pdf")
+
+
+# plot nUMIs per cell (density)
+UMIdensity_raw <- raw.metadata %>% 
+  ggplot(aes(x=nUMI, fill= timepoint, group = timepoint)) + 
+  geom_density(alpha = 0.4, fill = "gray10") + 
+#  theme() +
+  scale_x_continuous(labels = scales::comma, 
+                     trans = "log10", 
+                     limits = c(100,100000), 
+                     n.breaks = 8) +
+  scale_y_continuous(expand=c(0,0)) +
+  ylab("log10 cell density") +
+  ggtitle("UMIs per cell")
+# + geom_vline(xintercept = 650, color = "red")
+UMIdensity_raw
+ggsave("UMI_density_raw", plot = UMIdensity_raw, device = "pdf")
+
+
+# plot nGenes per cell (density)
+genedensity_raw <- raw.metadata %>% 
+  ggplot(aes(x=nGene, fill= timepoint, group = timepoint)) + 
+  geom_density(alpha = 0.4, fill = "gray10") +
+  #theme() +
+  scale_x_continuous(labels = scales::comma, 
+                     trans = "log10", 
+                     limits = c(100,100000), 
+                     n.breaks = 8,
+                     expand=c(0,0)) +
+  scale_y_continuous(limits = c(0,1.4),
+                     n.breaks = 8,
+                     expand=c(0,0)) +
+  ggtitle("nGenes per cell") +
+  # + geom_vline(xintercept = 250) +
+  ylab("log10 cell density")
+genedensity_raw
+ggsave("nGenepercell_raw", plot = genedensity_raw, device = "pdf")
+
+
+# plot nGene vs nUMI (scatter)
+genexumi_raw <- raw.metadata %>% 
+  ggplot(aes(x=nUMI, y=nGene)) + 
+  geom_point(alpha = 0.3) + 
+  #theme() +
+  stat_smooth(method=lm) +
+  scale_x_log10(labels = scales::comma,
+                     n.breaks = 8,
+                     limits = c(650,100000),
+                     expand=c(0,0)) +
+  scale_y_log10(labels = scales::comma,
+                expand=c(0,0)) +
+  ggtitle("nGene per nUMI")
+genexumi_raw
+ggsave("genexumi_raw", plot = genexumi_raw, device = "pdf")
+
+######################## Complexity scores #################################
+
+# Complexity score (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+raw.metadata$log10GenesPerUMI <- log10(hr.merged.kg$nGene) / log10(hr.merged.kg$nUMI)
+hr.merged.kg$log10GenesPerUMI <- log10(hr.merged.kg$nGene) / log10(hr.merged.kg$nUMI)
+
+
+# complexity scores (# genes detected per UMI)
+
+complexity <- raw.metadata %>%
+  ggplot(aes(x=log10GenesPerUMI, fill=timepoint)) +
+  geom_density(alpha = 0.4) +
+  #theme() +
+  scale_x_continuous(expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0)) +
+  ggtitle("Complexity score") +
+  geom_vline(xintercept = 0.8) +
+  ylab("Cell density")
+complexity
+ggsave("complexity", plot = complexity, device = "pdf")
+
+```
+
+## Remove empty droplets & repeat QC plots
+
+```{r}
+# first, just filter out low nUMI "cells"
+hr.merged.kg <- subset(hr.merged.kg, subset = nUMI > 500)
+
+
+metadata <- hr.merged.kg@meta.data
+
+save(hr.merged.kg, metadata, file = "hr.merged.kg.droplets")
+
+# run Cellbender (see python scripts) and import results
+# ERROR: cant pickle weakrefs 
+
+# compare Cellbender results to nCount_RNA filter
+# would go here if I could get Cellbender to work
+
+
+######################## nCells, nUMI (aka nCount), & nGene (aka nFeature) #################################
+ 
+#raw data before normalization, scaling, or filtration!
+
+# plot (bar) nCells per timepoint
+nCells <- metadata %>%
+  ggplot(aes(x= timepoint, fill= timepoint)) +
+  geom_bar() +
+#  theme() +
+  scale_y_continuous(expand=(c(0,0))) +
+  scale_fill_viridis_d() +
+  ggtitle("nCells")
+nCells
+ggsave("nCells", plot = nCells_raw, device = "pdf")
+
+
+# plot nUMIs per cell (density)
+UMIdensity <- metadata %>% 
+  ggplot(aes(x=nUMI, fill= timepoint, group = timepoint)) + 
+  geom_density(alpha = 0.4, fill = "gray10") + 
+#  theme() +
+  scale_x_continuous(labels = scales::comma, 
+                     trans = "log10", 
+                     limits = c(100,100000), 
+                     n.breaks = 8) +
+  scale_y_continuous(expand=c(0,0)) +
+  ylab("log10 cell density") +
+  ggtitle("UMIs per cell")
+# + geom_vline(xintercept = 650, color = "red")
+UMIdensity
+ggsave("UMI_density", plot = UMIdensity, device = "pdf")
+
+
+# plot nGenes per cell (density)
+genedensity <- metadata %>% 
+  ggplot(aes(x=nGene, fill= timepoint, group = timepoint)) + 
+  geom_density(alpha = 0.4, fill = "gray10") +
+  #theme() +
+  scale_x_continuous(labels = scales::comma, 
+                     trans = "log10", 
+                     limits = c(100,100000), 
+                     n.breaks = 8,
+                     expand=c(0,0)) +
+  scale_y_continuous(limits = c(0,1.4),
+                     n.breaks = 8,
+                     expand=c(0,0)) +
+  ggtitle("nGenes per cell") +
+  # + geom_vline(xintercept = 250) +
+  ylab("log10 cell density")
+genedensity
+ggsave("nGenepercell", plot = genedensity, device = "pdf")
+
+
+# plot nGene vs nUMI (scatter)
+genexumi <- metadata %>% 
+  ggplot(aes(x=nUMI, y=nGene)) + 
+  geom_point(alpha = 0.3) + 
+  #theme() +
+  stat_smooth(method=lm) +
+  scale_x_log10(labels = scales::comma,
+                     n.breaks = 8,
+                     limits = c(650,100000),
+                     expand=c(0,0)) +
+  scale_y_log10(labels = scales::comma,
+                expand=c(0,0)) +
+  ggtitle("nGene per nUMI")
+genexumi
+ggsave("genexumi", plot = genexumi, device = "pdf")
+
+
+# complexity scores (# genes detected per UMI)
+complexity <- metadata %>%
+  ggplot(aes(x=log10GenesPerUMI, fill=timepoint)) +
+  geom_density(alpha = 0.4) +
+  #theme() +
+  scale_x_continuous(expand=c(0,0))+
+  scale_y_continuous(expand=c(0,0)) +
+  ggtitle("Complexity score") +
+  #geom_vline(xintercept = 0.8) +
+  ylab("Cell density")
+complexity
+ggsave("complexity", plot = complexity, device = "pdf")
+
+```
+
+
+# QC Filtering (each timepoint individually)
+
+
+```{r}
+
+#load objects
+load(file="hr.meta.kg.RData")
+
+
+#Prepare each Seurat object
+## hr0 ##
+#view merged metatdata
+View(hr0@meta.data)
+# Compute novelty score and add column (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+hr0$log10GenesPerUMI <- log10(hr0$nFeature_RNA) / log10(hr0$nCount_RNA)
+#rename columns
+metadata <- hr0@meta.data
+metadata$cells <- rownames(metadata)
+metadata <- metadata %>%
+  dplyr::rename(nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+hr0@meta.data <- metadata
+View(hr0@meta.data)
+
+## hr3 ##
+#view merged metatdata
+View(hr3@meta.data)
+# Compute novelty score and add column (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+hr3$log10GenesPerUMI <- log10(hr3$nFeature_RNA) / log10(hr3$nCount_RNA)
+#rename columns
+metadata <- hr3@meta.data
+metadata$cells <- rownames(metadata)
+metadata <- metadata %>%
+  dplyr::rename(nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+hr3@meta.data <- metadata
+
+## hr6 ##
+#view merged metatdata
+View(hr6@meta.data)
+# Compute novelty score and add column (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+hr6$log10GenesPerUMI <- log10(hr6$nFeature_RNA) / log10(hr6$nCount_RNA)
+#rename columns
+metadata <- hr6@meta.data
+metadata$cells <- rownames(metadata)
+metadata <- metadata %>%
+  dplyr::rename(nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+hr6@meta.data <- metadata
+
+## hr12 ##
+#view merged metatdata
+View(hr12@meta.data)
+# Compute novelty score and add column (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+hr12$log10GenesPerUMI <- log10(hr12$nFeature_RNA) / log10(hr12$nCount_RNA)
+#rename columns
+metadata <- hr12@meta.data
+metadata$cells <- rownames(metadata)
+metadata <- metadata %>%
+  dplyr::rename(nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+hr12@meta.data <- metadata
+
+## hr18 ##
+#view merged metatdata
+View(hr18@meta.data)
+# Compute novelty score and add column (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+hr18$log10GenesPerUMI <- log10(hr18$nFeature_RNA) / log10(hr18$nCount_RNA)
+#rename columns
+metadata <- hr18@meta.data
+metadata$cells <- rownames(metadata)
+metadata <- metadata %>%
+  dplyr::rename(nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+hr18@meta.data <- metadata
+
+## hr24 ##
+#view merged metatdata
+View(hr24@meta.data)
+# Compute novelty score and add column (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+hr24$log10GenesPerUMI <- log10(hr24$nFeature_RNA) / log10(hr24$nCount_RNA)
+#rename columns
+metadata <- hr24@meta.data
+metadata$cells <- rownames(metadata)
+metadata <- metadata %>%
+  dplyr::rename(nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+hr24@meta.data <- metadata
+
+## hr36 ##
+#view merged metatdata
+View(hr36@meta.data)
+# Compute novelty score and add column (logGenesPerUMI = logGenesPerCell / logUMIsPerCell)
+hr36$log10GenesPerUMI <- log10(hr36$nFeature_RNA) / log10(hr36$nCount_RNA)
+#rename columns
+metadata <- hr36@meta.data
+metadata$cells <- rownames(metadata)
+metadata <- metadata %>%
+  dplyr::rename(nUMI = nCount_RNA,
+                nGene = nFeature_RNA)
+hr36@meta.data <- metadata
+
+
+##Filter each timepoint independently
+hr0f <- subset(hr0, subset = (nUMI >= 650) & 
+                 (nGene >= 250) & 
+                 (log10GenesPerUMI > 0.8))
+
+hr3f <- subset(hr3, subset = (nUMI >= 650) & 
+                 (nGene >= 250) & 
+                 (log10GenesPerUMI > 0.8))
+
+hr6f <- subset(hr6, subset = (nUMI >= 650) & 
+                 (nGene >= 250) & 
+                 (log10GenesPerUMI > 0.8))
+
+hr12f <- subset(hr12, subset = (nUMI >= 650) & 
+                  (nGene >= 250) & 
+                  (log10GenesPerUMI > 0.8))
+
+hr18f <- subset(hr18, subset = (nUMI >= 650) & 
+                  (nGene >= 250) & 
+                  (log10GenesPerUMI > 0.8))
+
+hr24f <- subset(hr24, subset = (nUMI >= 650) & 
+                  (nGene >= 250) & 
+                  (log10GenesPerUMI > 0.8))
+
+hr36f <- subset(hr36, subset = (nUMI >= 650) & 
+                  (nGene >= 250) & 
+                  (log10GenesPerUMI > 0.8))
+
+#Scatter plots
+#hr0
+hr0scatter <- FeatureScatter(hr0, feature1 = "nUMI", feature2 = "nGene")
+hr0fscatter <- FeatureScatter(hr0f, feature1 = "nUMI", feature2 = "nGene")
+svglite("hr0filter_scatter.svg")
+hr0scatter | hr0fscatter
+dev.off()
+
+#hr3
+hr3scatter <- FeatureScatter(hr3, feature1 = "nUMI", feature2 = "nGene")
+hr3fscatter <- FeatureScatter(hr3f, feature1 = "nUMI", feature2 = "nGene")
+hr3scatter | hr3fscatter
+
+#hr6
+hr6scatter <- FeatureScatter(hr6, feature1 = "nUMI", feature2 = "nGene")
+hr6fscatter <- FeatureScatter(hr6f,feature1 = "nUMI", feature2 = "nGene")
+hr6scatter | hr6fscatter
+
+#hr12
+hr12scatter <- FeatureScatter(hr12, feature1 = "nUMI", feature2 = "nGene")
+hr12fscatter <- FeatureScatter(hr12f, feature1 = "nUMI", feature2 = "nGene")
+hr12scatter | hr12fscatter
+
+#hr18
+hr18scatter <- FeatureScatter(hr18, feature1 = "nUMI", feature2 = "nGene")
+hr18fscatter <- FeatureScatter(hr18f, feature1 = "nUMI", feature2 = "nGene")
+hr18scatter | hr18fscatter
+
+#hr24
+hr24scatter <- FeatureScatter(hr24, feature1 = "nUMI", feature2 = "nGene")
+hr24fscatter <- FeatureScatter(hr24f, feature1 = "nUMI", feature2 = "nGene")
+hr24scatter | hr24fscatter
+
+#hr36
+hr36scatter <- FeatureScatter(hr36, feature1 = "nUMI", feature2 = "nGene")
+hr36fscatter <- FeatureScatter(hr36f, feature1 = "nUMI", feature2 = "nGene")
+hr36scatter | hr36fscatter
+
+#Filter hr.merged (for visualization purposes only)
+hr.merged.kg.f <- subset(hr.merged.kg, subset = (nUMI >= 650) & 
+                        (nGene >= 250) # & 
+                       # (log10GenesPerUMI > 0.8)
+                       )
+hr.merged.scatter <- FeatureScatter(hr.merged.kg, feature1 = "nUMI", feature2 = "nGene")
+hr.merged.fscatter <- FeatureScatter(hr.merged.kg.f, feature1 = "nUMI", feature2 = "nGene")
+svglite("hr.mergedfilter_scatter.svg")
+hr.merged.scatter | hr.merged.fscatter
+dev.off()
+
+#plot n cells per timepoint before & after filtering
+#Plot nCells per timepoint
+n <- metadata %>%
+  ggplot(aes(x=timepoint, fill=timepoint)) +
+  geom_bar(aes(x = factor(timepoint))) +
+  #theme() +
+  scale_y_continuous(expand=c(0,0)) +
+  ggtitle("nCells per timepoint")
+
+#custom palette RdYlBu in chronological order
+chronRdYlBu_palette <- c("#d73027",
+                         "#ffffbf",
+                         "#e0f3f8",
+                         "#91bfdb",
+                         "#fc8d59",
+                         "#4575b4",
+                         "#fee090")
+
+n + scale_fill_manual(values = chronRdYlBu_palette) + DarkTheme() + guides(fill="none")
+ggsave("nCells", plot = n, device = "pdf")
+
+nf <- hr.merged.f %>%
+  ggplot(aes(x=timepoint, fill=timepoint)) +
+  geom_bar(aes(x = factor(timepoint, level = timepoint))) +
+  theme() +
+  scale_y_continuous(expand=c(0,0)) +
+  ggtitle("nCells per timepoint")
+#custom palette RdYlBu in chronological order
+chronRdYlBu_palette <- c("#d73027",
+                         "#ffffbf",
+                         "#e0f3f8",
+                         "#91bfdb",
+                         "#fc8d59",
+                         "#4575b4",
+                         "#fee090")
+
+nf + scale_fill_manual(values = chronRdYlBu_palette) + DarkTheme() + guides(fill="none")
+ggsave("nCellsAfterFiltering", plot = nf, device = "pdf")
+
+
+#SAVE AND LOAD
+save(hr0f, hr12f, hr18f, hr24f, hr36f, hr3f, hr36f, hr6f, hr.merged.f, file="hr.meta.f.RData")
+#load(file = "hr.meta.f.RData)
+#set.seed(123456)
+
+
+########
+################# SCTransform individual timepoints #################
+########
+
+#Normalize, Scale, and find VariableFeatures for each timepoint independently
+hr0fs <- SCTransform(hr0f, vst.flavor = "v2", variable.features.n = 3000)
+hr3fs <- SCTransform(hr3f, vst.flavor = "v2", variable.features.n = 3000)
+hr6fs <- SCTransform(hr6f, vst.flavor = "v2", variable.features.n = 3000)
+hr12fs <- SCTransform(hr12f, vst.flavor = "v2", variable.features.n = 3000)
+hr18fs <- SCTransform(hr18f, vst.flavor = "v2", variable.features.n = 3000)
+hr24fs <- SCTransform(hr24f, vst.flavor = "v2", variable.features.n = 3000)
+hr36fs <- SCTransform(hr36f, vst.flavor = "v2", variable.features.n = 3000)
+
+hrfs.list <- c(hr0fs, hr3fs, hr6fs, hr12fs, hr18fs, hr24fs, hr36fs)
+
+
+#SAVE AND LOAD
+save(hr0fs, hr12fs, hr18fs, hr24fs, hr36fs, hr3fs, hr36fs, hr6fs, hrfs.list, file="hr.meta.f.SCT.RData")
+#load(file = "hr.meta.f.SCT.RData")
+#set.seed(123456)
+
+############
+#
+############################
+#
+############################################################### TIMEPOINT INTEGRATION ###############################################################
+#
+############################
+#
+############
+
+#Select features that are repeatedly variable across datasets for integration
+hrfs.var_features <- SelectIntegrationFeatures(object.list = hrfs.list, nfeatures = 3000)
+
+hrfs.list <- PrepSCTIntegration(hrfs.list, anchor.features = hrfs.var_features)
+
+#Identify Anchors
+hrfs.anchors <- FindIntegrationAnchors(object.list = hrfs.list, 
+                                       normalization.method = "SCT", 
+                                       anchor.features = hrfs.var_features)
+
+#Integration
+hr.int <- IntegrateData(anchorset = hrfs.anchors, normalization.method = "SCT")
+
+
+#Specify that downstream analysis is on integrated dataset
+DefaultAssay(hr.int) <- "integrated"
+
+#Regroup idents based on timepoint
+RegroupIdents(hr.int, "timepoint")
+
+
+#Reorder timepoints in chronological order
+hr.int$timepoint <- factor(hr.int$timepoint, 
+                           levels = c("hr0", "hr3", "hr6", "hr12", "hr18", "hr24", "hr36"))
+
+unique(sapply(X = strsplit(colnames(hr.int), split = "_"), FUN = "[", 1))
+
+
+#Scale and center data
+ScaleData(hr.int,
+          model.use = "linear",
+          use.umi = FALSE,
+          do.scale = TRUE,
+          do.center = TRUE)
+
+
+#SAVE AND LOAD
+save(hr.int, file="hr.int.RData")
+#load(file = "hr.int.RData")
+#set.seed(123456)
+
