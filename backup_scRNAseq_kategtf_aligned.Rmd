@@ -76,37 +76,37 @@ hr0_metadata <- hr0[[]]
 head(hr0_metadata)
 
 # 3hr timepoint
-hr3.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr3.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen3hrs/outs/raw_feature_bc_matrix")
 hr3 <- CreateSeuratObject(counts = hr3.data)
 class(hr3[["RNA"]])
 hr3[["timepoint"]] <- "hr3"
 
 # 6 hr timepoint
-hr6.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr6.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen6hrs/outs/raw_feature_bc_matrix")
 hr6 <- CreateSeuratObject(counts = hr6.data)
 class(hr6[["RNA"]])
 hr6[["timepoint"]] <- "hr6"
 
 # 12hr timepoint
-hr12.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr12.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen12hrs/outs/raw_feature_bc_matrix")
 hr12 <- CreateSeuratObject(counts = hr12.data)
 class(hr12[["RNA"]])
 hr12[["timepoint"]] <- "hr12"
 
 # 18hr timepoint
-hr18.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr18.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen18hrs/outs/raw_feature_bc_matrix")
 hr18 <- CreateSeuratObject(counts = hr18.data)
 class(hr18[["RNA"]])
 hr18[["timepoint"]] <- "hr18"
 
 # 24hr timepoint
-hr24.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr24.data <- Read10X(data.dir = "/home/bret/scRNAseq_kategtf_cellranger/head_regen24hrs/outs/raw_feature_bc_matrix")
 hr24 <- CreateSeuratObject(counts = hr24.data)
 class(hr24[["RNA"]])
 hr24[["timepoint"]] <- "hr24"
 
 # 36hr timepoint
-hr36.data <- Read10X(data.dir = "//home/bret/scRNAseq_kategtf_cellranger/head_regen/outs/raw_feature_bc_matrix")
+hr36.data <- Read10X(data.dir = "//home/bret/scRNAseq_kategtf_cellranger/head_regen36hrs/outs/raw_feature_bc_matrix")
 hr36 <- CreateSeuratObject(counts = hr36.data)
 class(hr36[["RNA"]])
 hr36[["timepoint"]] <- "hr36"
@@ -123,8 +123,7 @@ save(hr0, hr3, hr6, hr12, hr18, hr24, hr36, file="hr.meta.kg.RData")
 
 ```{r}
 
-theme <- ggpacket() +
-  theme(text=element_text(size=18, color="black"),
+krplot <- theme(text=element_text(size=18, color="black"),
         rect=(element_blank()),
         axis.line=element_line(),
         axis.text=element_text(size=14, color="black"),
@@ -135,6 +134,51 @@ theme <- ggpacket() +
 
 
 # Quality Control Metrics
+
+
+## Check # cells
+
+```{r}
+# function to return # cells in Seurat object
+get_cell_count <- function(count_this) {
+  return(ncol(count_this))
+}
+
+# usage
+#count_this <- hr.merged.kg
+#cell_count <- get_cell_count(count_this)
+#cat("Number of cells in the Seurat object:", cell_count, "\n")
+
+# check # cells raw counts
+count_this <- hr0
+cell_count <- get_cell_count(count_this)
+cat("Number of cells in hr0:", cell_count, "\n")
+
+count_this <- hr3
+cell_count <- get_cell_count(count_this)
+cat("Number of cells in hr3:", cell_count, "\n")
+
+count_this <- hr6
+cell_count <- get_cell_count(count_this)
+cat("Number of cells in hr6:", cell_count, "\n")
+
+count_this <- hr12
+cell_count <- get_cell_count(count_this)
+cat("Number of cells in hr12:", cell_count, "\n")
+
+count_this <- hr18
+cell_count <- get_cell_count(count_this)
+cat("Number of cells in hr18:", cell_count, "\n")
+
+count_this <- hr24
+cell_count <- get_cell_count(count_this)
+cat("Number of cells in hr24:", cell_count, "\n")
+
+count_this <- hr36
+cell_count <- get_cell_count(count_this)
+cat("Number of cells in hr36:", cell_count, "\n")
+
+```
 
 
 
@@ -184,12 +228,16 @@ cat("Merge compute time:", end_time - start_time)
 # load back into RStudio
 load(file = "hr.merged.kg.RData")
 
+count_this <- hr.merged.kg
+cell_count <- get_cell_count(count_this)
+cat("Number of cells in the Seurat object:", cell_count, "\n")
+
+
 # clean up env
-rm(hr0, hr0_metadata, hr0.data, hr3, hr3.data, hr6, hr6.data, hr12, hr12.data, hr18, hr18.data, hr24, hr24.data, hr36, hr36.data)
+rm(hr0_metadata, hr0.data, hr3.data, hr6.data, hr12.data, hr18.data, hr24.data, hr36.data)
 
 
 raw.metadata <- hr.merged.kg@meta.data
-head(raw.metadata)
 unique(raw.metadata$timepoint)
 
 #force chronological timepoint order (default is alphanumeric)
@@ -208,7 +256,7 @@ raw.metadata <- raw.metadata %>%
   dplyr::rename(nUMI = nCount_RNA,
                 nGene = nFeature_RNA)
 hr.merged.kg@meta.data <- raw.metadata
-View(hr.merged.kg@meta.data)
+head(hr.merged.kg@meta.data)
 
 
 # SAVE & LOAD          
@@ -229,7 +277,7 @@ save(hr.merged.kg, file = "hr.merged.kg.RData")
 nCells_raw <- raw.metadata %>%
   ggplot(aes(x= timepoint, fill= timepoint)) +
   geom_bar() +
-#  theme() +
+  krplot() +
   scale_y_continuous(expand=(c(0,0))) +
   scale_fill_viridis_d() +
   ggtitle("nCells (raw)")
@@ -241,34 +289,33 @@ ggsave("nCells_raw", plot = nCells_raw, device = "pdf")
 UMIdensity_raw <- raw.metadata %>% 
   ggplot(aes(x=nUMI, fill= timepoint, group = timepoint)) + 
   geom_density(alpha = 0.4, fill = "gray10") + 
-#  theme() +
+  krplot() +
   scale_x_continuous(labels = scales::comma, 
                      trans = "log10", 
-                     limits = c(100,100000), 
+                     limits = c(1,100000), 
                      n.breaks = 8) +
-  scale_y_continuous(expand=c(0,0)) +
+  scale_y_continuous(expand=(c(0,0))) +
   ylab("log10 cell density") +
-  ggtitle("UMIs per cell")
-# + geom_vline(xintercept = 650, color = "red")
+  ggtitle("log10 UMIs per cell")+
+  geom_vline(xintercept = 100, color = "red")
 UMIdensity_raw
 ggsave("UMI_density_raw", plot = UMIdensity_raw, device = "pdf")
+
 
 
 # plot nGenes per cell (density)
 genedensity_raw <- raw.metadata %>% 
   ggplot(aes(x=nGene, fill= timepoint, group = timepoint)) + 
   geom_density(alpha = 0.4, fill = "gray10") +
-  #theme() +
+  krplot() +
   scale_x_continuous(labels = scales::comma, 
                      trans = "log10", 
-                     limits = c(100,100000), 
-                     n.breaks = 8,
+                     limits = c(1,100000),
                      expand=c(0,0)) +
   scale_y_continuous(limits = c(0,1.4),
-                     n.breaks = 8,
                      expand=c(0,0)) +
   ggtitle("nGenes per cell") +
-  # + geom_vline(xintercept = 250) +
+  # + geom_vline(xintercept = 200) +
   ylab("log10 cell density")
 genedensity_raw
 ggsave("nGenepercell_raw", plot = genedensity_raw, device = "pdf")
@@ -278,11 +325,11 @@ ggsave("nGenepercell_raw", plot = genedensity_raw, device = "pdf")
 genexumi_raw <- raw.metadata %>% 
   ggplot(aes(x=nUMI, y=nGene)) + 
   geom_point(alpha = 0.3) + 
-  #theme() +
+  krplot() +
   stat_smooth(method=lm) +
   scale_x_log10(labels = scales::comma,
                      n.breaks = 8,
-                     limits = c(650,100000),
+                     limits = c(1,100000),
                      expand=c(0,0)) +
   scale_y_log10(labels = scales::comma,
                 expand=c(0,0)) +
@@ -302,7 +349,7 @@ hr.merged.kg$log10GenesPerUMI <- log10(hr.merged.kg$nGene) / log10(hr.merged.kg$
 complexity <- raw.metadata %>%
   ggplot(aes(x=log10GenesPerUMI, fill=timepoint)) +
   geom_density(alpha = 0.4) +
-  #theme() +
+  krplot() +
   scale_x_continuous(expand=c(0,0))+
   scale_y_continuous(expand=c(0,0)) +
   ggtitle("Complexity score") +
@@ -313,14 +360,21 @@ ggsave("complexity", plot = complexity, device = "pdf")
 
 ```
 
-## Remove empty droplets & repeat QC plots
+## Remove empty droplets, first QC filter,  & repeat QC plots
 
 ```{r}
-# first, just filter out low nUMI "cells"
-hr.merged.kg <- subset(hr.merged.kg, subset = nUMI > 500)
+# remove empty droplets
+hr.merged.kg <- subset(hr.merged.kg, subset = nUMI > 200)
+
+# remove low quality cells
+hr.merged.kg <- subset(hr.merged.kg, subset = nGene > 200)
 
 
 metadata <- hr.merged.kg@meta.data
+
+
+metadata$timepoint <- factor(metadata$timepoint,
+                             levels = c("0hrs", "3hrs", "6hrs", "12hrs", "18hrs", "24hrs", "36hrs"))
 
 save(hr.merged.kg, metadata, file = "hr.merged.kg.droplets")
 
@@ -331,37 +385,39 @@ save(hr.merged.kg, metadata, file = "hr.merged.kg.droplets")
 # would go here if I could get Cellbender to work
 
 
+
+
 ######################## nCells, nUMI (aka nCount), & nGene (aka nFeature) #################################
  
-#raw data before normalization, scaling, or filtration!
+# after empty droplets removed, before normalization, scaling, or filtration!
 
 # plot (bar) nCells per timepoint
 nCells <- metadata %>%
   ggplot(aes(x= timepoint, fill= timepoint)) +
   geom_bar() +
-#  theme() +
-  scale_y_continuous(expand=(c(0,0))) +
+  krplot +
+  scale_y_continuous(labels = scales::label_comma(),
+                     limits = c(0,80000),
+                     n.breaks = 7) +
   scale_fill_viridis_d() +
   ggtitle("nCells")
 nCells
-ggsave("nCells", plot = nCells_raw, device = "pdf")
+ggsave("nCells_emptydropletsremoved", plot = nCells, device = "pdf")
 
 
 # plot nUMIs per cell (density)
 UMIdensity <- metadata %>% 
   ggplot(aes(x=nUMI, fill= timepoint, group = timepoint)) + 
   geom_density(alpha = 0.4, fill = "gray10") + 
-#  theme() +
-  scale_x_continuous(labels = scales::comma, 
-                     trans = "log10", 
-                     limits = c(100,100000), 
-                     n.breaks = 8) +
+  krplot() +
+  scale_x_continuous(expand=c(0,0)) +
   scale_y_continuous(expand=c(0,0)) +
-  ylab("log10 cell density") +
-  ggtitle("UMIs per cell")
-# + geom_vline(xintercept = 650, color = "red")
+  ylab("cell density") +
+  ggtitle("UMIs per cell") +
+  geom_vline(xintercept = 100, color = "red")
 UMIdensity
-ggsave("UMI_density", plot = UMIdensity, device = "pdf")
+ggsave("UMI_density_emptydropletsremoved", plot = UMIdensity, device = "pdf")
+
 
 
 # plot nGenes per cell (density)
@@ -371,17 +427,17 @@ genedensity <- metadata %>%
   #theme() +
   scale_x_continuous(labels = scales::comma, 
                      trans = "log10", 
-                     limits = c(100,100000), 
+                     limits = c(10,10000), 
                      n.breaks = 8,
                      expand=c(0,0)) +
-  scale_y_continuous(limits = c(0,1.4),
+  scale_y_continuous(limits = c(0,4),
                      n.breaks = 8,
                      expand=c(0,0)) +
   ggtitle("nGenes per cell") +
   # + geom_vline(xintercept = 250) +
   ylab("log10 cell density")
 genedensity
-ggsave("nGenepercell", plot = genedensity, device = "pdf")
+ggsave("nGenepercell_emptydropletsremoved", plot = genedensity, device = "pdf")
 
 
 # plot nGene vs nUMI (scatter)
@@ -589,8 +645,8 @@ hr36scatter | hr36fscatter
 
 #Filter hr.merged (for visualization purposes only)
 hr.merged.kg.f <- subset(hr.merged.kg, subset = (nUMI >= 650) & 
-                        (nGene >= 250) # & 
-                       # (log10GenesPerUMI > 0.8)
+                        (nGene >= 250) & 
+                        (log10GenesPerUMI > 0.8)
                        )
 hr.merged.scatter <- FeatureScatter(hr.merged.kg, feature1 = "nUMI", feature2 = "nGene")
 hr.merged.fscatter <- FeatureScatter(hr.merged.kg.f, feature1 = "nUMI", feature2 = "nGene")
@@ -602,7 +658,7 @@ dev.off()
 #Plot nCells per timepoint
 n <- metadata %>%
   ggplot(aes(x=timepoint, fill=timepoint)) +
-  geom_bar(aes(x = factor(timepoint))) +
+  geom_bar(aes(x = factor(timepoint), levelorder)) +
   #theme() +
   scale_y_continuous(expand=c(0,0)) +
   ggtitle("nCells per timepoint")
@@ -619,7 +675,7 @@ chronRdYlBu_palette <- c("#d73027",
 n + scale_fill_manual(values = chronRdYlBu_palette) + DarkTheme() + guides(fill="none")
 ggsave("nCells", plot = n, device = "pdf")
 
-nf <- hr.merged.f %>%
+nf <- hr.merged.kg.f %>%
   ggplot(aes(x=timepoint, fill=timepoint)) +
   geom_bar(aes(x = factor(timepoint, level = timepoint))) +
   theme() +
