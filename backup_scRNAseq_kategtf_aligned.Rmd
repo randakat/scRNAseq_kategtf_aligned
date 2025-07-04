@@ -722,18 +722,15 @@ hrfs.list <- c(hr0fs, hr3fs, hr6fs, hr12fs, hr18fs, hr24fs, hr36fs)
 
 #SAVE AND LOAD
 save(hr0fs, hr12fs, hr18fs, hr24fs, hr36fs, hr3fs, hr36fs, hr6fs, hrfs.list, file="hr.meta.f.SCT.RData")
+```
+
+
+## TIMEPOINT INTEGRATION
+
+```{r}
 #load(file = "hr.meta.f.SCT.RData")
 #set.seed(123456)
 
-############
-#
-############################
-#
-############################################################### TIMEPOINT INTEGRATION ###############################################################
-#
-############################
-#
-############
 
 #Select features that are repeatedly variable across datasets for integration
 hrfs.var_features <- SelectIntegrationFeatures(object.list = hrfs.list, nfeatures = 3000)
@@ -744,6 +741,7 @@ hrfs.list <- PrepSCTIntegration(hrfs.list, anchor.features = hrfs.var_features)
 hrfs.anchors <- FindIntegrationAnchors(object.list = hrfs.list, 
                                        normalization.method = "SCT", 
                                        anchor.features = hrfs.var_features)
+
 
 #Integration
 hr.int <- IntegrateData(anchorset = hrfs.anchors, normalization.method = "SCT")
@@ -773,6 +771,149 @@ ScaleData(hr.int,
 
 #SAVE AND LOAD
 save(hr.int, file="hr.int.RData")
+```
+
+
+## PCA & Clustering
+
+```{r}
 #load(file = "hr.int.RData")
 #set.seed(123456)
 
+
+hr.int <- RunPCA(hr.int, npcs = 100)
+
+#Plot PCA
+VizDimLoadings(hr.int, 
+               dims = 1:10, 
+               reduction = "pca")
+
+DimPlot(hr.int, 
+        reduction = "pca",
+        pt.size = 0.3)
+
+DimHeamap(hr.int, dims = 1, 
+           cells = 500, 
+           balanced = TRUE)
+
+DimHeatmap(hr.int, dims = 1:10,
+           cells = 500, 
+           balanced = TRUE)
+
+
+#Elbow Plot
+ElbowPlot(hr.int, ndims = 50)
+
+#Elbow Plot quantification
+pct <- hr.int[["pca"]]@stdev / sum(hr.int[["pca"]]@stdev) * 100
+cumu <- cumsum(pct)
+co1 <- which(cumu > 90 & pct <5) [1]
+
+co2 <- sort(which((pct[1:length(pct)-1] - pct[2:length(pct)]) < 0.1), decreasing = T) [1] + 1
+co2
+
+pcs <- min(co1,co2)
+pcs
+
+plot_df <- data.frame(pct = pct,
+                      cumu = cumu,
+                      rank = 1:length(pct))
+ggplot(plot_df, aes(cumu, pct, label = rank, color = rank>pcs)) +
+  geom_text() +
+  geom_vline(xintercept = 90, color = "grey") +
+  geom_hline(yintercept = min(pct[pct>5]), color = "grey")+
+  theme_bw()
+
+#SAVE AND LOAD
+save(hr.int, file="hr.int.RData")
+#load(file = "hr.int.RData")
+#set.seed(123456)
+
+
+########
+################# Clustering #################
+########
+
+#Run UMAP
+hr.int <- RunUMAP(hr.int, 
+                  reduction = "pca", 
+                  dims = 1:20)
+
+# Find Neighbors
+hr.int <- FindNeighbors(hr.int, 
+                        reduction = "pca", 
+                        dims = 1:20)
+
+#Set Clustering Resolution 
+hr.int <- FindClusters(hr.int, resolution = 0.2)
+
+#Plot UMAP (by clusters)
+UMAP.cluster <- DimPlot(hr.int, 
+                        reduction = "umap", 
+                        group.by = "seurat_clusters", 
+                        label = TRUE, 
+                        repel = FALSE,
+                        pt.size = 0.4)
+UMAP.cluster
+
+
+#Plot UMAP (by timepoint)
+data("hr.int")
+umap <- hr.int[["umap"]]
+dr <- FetchData(hr.int, vars = c("timepoint"))
+df <- fortify(umap, data = dr)
+timeumap <- ggplot(df, mapping = aes(x = umap_1, y = umap_2, color = timepoint)) +
+  geom_point(alpha=.8, stroke=0, size = 1) +
+  theme_classic(base_size = 14) +
+  scale_color_brewer(palette="RdYlBu")
+timeumap + DarkTheme()
+
+
+#Plot tSNE (by timepoint)
+tSNE.time <- DimPlot(hr.int,
+                     reduction = "tsne",
+                     group.by = "timepoint",
+                     label = TRUE,
+                     repel = TRUE,
+                     pt.size = 0.4)
+tSNE.time
+
+
+#Compare UMAPs for each timepoint
+DimPlot(hr.int, split.by = "timepoint", ncol = 3, group.by = "timepoint", pt.size = 0.4) & scale
+
+#FeaturePlot(hr.int, features = c(hr.int@timepoint("hr0", "hr36"), split.by = "timepoint")
+
+
+#Tabulate nCells per cluster by timepoint
+n_cells <- FetchData(hr.int,
+                     vars = c("timepoint", "ident")) %>%
+  dplyr::count(timepoint, ident) %>%
+  tidyr::spread(ident, n)
+View(n_cells)
+write.csv(n_cells, file = "hr.int.nCellspercluster.bytimepoint.csv", row.names = TRUE)
+
+#Plot nCells per timepoint
+nc <- FetchData(hr.int, vars = c("timepoint", "seurat_clusters"))
+ncells.clustxtime <- ggplot(nc, mapping = aes(x = seurat_clusters, fill= timepoint))
+ncells.clustxtime + 
+  geom_bar() + 
+  scale_fill_brewer(palette="RdYlBu")
+ggsave("nCells.clustxtime", plot = ncells.clustxtime, device = "pdf")
+
+########
+################# Marker Gene Expression Plotting #################
+########
+
+##Piwi-1 
+#Find numeric value of 10th quantile to use as NA cutoff
+piwi.exp <- FetchData(object = hr.int, vars = "h1SMcG0013999")
+q10 <- quantile(piwi.exp, na.rm = TRUE, probs = 0.90)
+#plot exp on UMAP
+FeaturePlot_scCustom(seurat_object = hr.int,
+            features = "h1SMcG0013999", #piwi-1
+            pt.size = 0.4, 
+            order = TRUE,
+            na_cutoff = q10,
+            colors_use = viridis_dark_high,
+            na_color = "gray")
