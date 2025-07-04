@@ -859,9 +859,6 @@ UMAP.cluster
 
 
 
-#FeaturePlot(hr.int, features = c(hr.int@timepoint("hr0", "hr36"), split.by = "timepoint")
-
-
 #Tabulate nCells per cluster by timepoint
 n_cells <- FetchData(hr.int,
                      vars = c("timepoint", "ident")) %>%
@@ -880,6 +877,12 @@ ggsave("nCells.clustxtime", plot = ncells.clustxtime, device = "pdf")
 
 # plot (bar) nCells per timepoint
 nc <- FetchData(hr.int, vars = c("timepoint"))
+
+
+print ncells per timepoint
+table(hr.int$timepoint)
+
+
 
 # Plot total cells per timepoint (single bar per timepoint)
 ncells.timepoint <- ggplot(nc, aes(x = timepoint, fill = timepoint)) +
