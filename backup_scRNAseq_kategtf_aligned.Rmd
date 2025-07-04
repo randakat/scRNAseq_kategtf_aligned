@@ -277,7 +277,7 @@ save(hr.merged.kg, file = "hr.merged.kg.RData")
 nCells_raw <- raw.metadata %>%
   ggplot(aes(x= timepoint, fill= timepoint)) +
   geom_bar() +
-  krplot() +
+  krplot +
   scale_y_continuous(expand=(c(0,0))) +
   scale_fill_viridis_d() +
   ggtitle("nCells (raw)")
@@ -289,7 +289,7 @@ ggsave("nCells_raw", plot = nCells_raw, device = "pdf")
 UMIdensity_raw <- raw.metadata %>% 
   ggplot(aes(x=nUMI, fill= timepoint, group = timepoint)) + 
   geom_density(alpha = 0.4, fill = "gray10") + 
-  krplot() +
+  krplot +
   scale_x_continuous(labels = scales::comma, 
                      trans = "log10", 
                      limits = c(1,100000), 
@@ -307,7 +307,7 @@ ggsave("UMI_density_raw", plot = UMIdensity_raw, device = "pdf")
 genedensity_raw <- raw.metadata %>% 
   ggplot(aes(x=nGene, fill= timepoint, group = timepoint)) + 
   geom_density(alpha = 0.4, fill = "gray10") +
-  krplot() +
+  krplot +
   scale_x_continuous(labels = scales::comma, 
                      trans = "log10", 
                      limits = c(1,100000),
@@ -325,7 +325,7 @@ ggsave("nGenepercell_raw", plot = genedensity_raw, device = "pdf")
 genexumi_raw <- raw.metadata %>% 
   ggplot(aes(x=nUMI, y=nGene)) + 
   geom_point(alpha = 0.3) + 
-  krplot() +
+  krplot +
   stat_smooth(method=lm) +
   scale_x_log10(labels = scales::comma,
                      n.breaks = 8,
@@ -349,7 +349,7 @@ hr.merged.kg$log10GenesPerUMI <- log10(hr.merged.kg$nGene) / log10(hr.merged.kg$
 complexity <- raw.metadata %>%
   ggplot(aes(x=log10GenesPerUMI, fill=timepoint)) +
   geom_density(alpha = 0.4) +
-  krplot() +
+  krplot +
   scale_x_continuous(expand=c(0,0))+
   scale_y_continuous(expand=c(0,0)) +
   ggtitle("Complexity score") +
@@ -378,11 +378,14 @@ metadata$timepoint <- factor(metadata$timepoint,
 
 save(hr.merged.kg, metadata, file = "hr.merged.kg.droplets")
 
+#load(file= "hr.merged.kg.droplets.RData")
+
+
 # run Cellbender (see python scripts) and import results
 # ERROR: cant pickle weakrefs 
 
 # compare Cellbender results to nCount_RNA filter
-# would go here if I could get Cellbender to work
+# would go here if I could get Cellbender to work :(
 
 
 
@@ -409,8 +412,9 @@ ggsave("nCells_emptydropletsremoved", plot = nCells, device = "pdf")
 UMIdensity <- metadata %>% 
   ggplot(aes(x=nUMI, fill= timepoint, group = timepoint)) + 
   geom_density(alpha = 0.4, fill = "gray10") + 
-  krplot() +
-  scale_x_continuous(expand=c(0,0)) +
+  krplot +
+  scale_x_continuous(labels = scales::label_comma(),
+                     limits = c(0,25000)) +
   scale_y_continuous(expand=c(0,0)) +
   ylab("cell density") +
   ggtitle("UMIs per cell") +
@@ -424,7 +428,7 @@ ggsave("UMI_density_emptydropletsremoved", plot = UMIdensity, device = "pdf")
 genedensity <- metadata %>% 
   ggplot(aes(x=nGene, fill= timepoint, group = timepoint)) + 
   geom_density(alpha = 0.4, fill = "gray10") +
-  #theme() +
+  krplot +
   scale_x_continuous(labels = scales::comma, 
                      trans = "log10", 
                      limits = c(10,10000), 
@@ -444,7 +448,7 @@ ggsave("nGenepercell_emptydropletsremoved", plot = genedensity, device = "pdf")
 genexumi <- metadata %>% 
   ggplot(aes(x=nUMI, y=nGene)) + 
   geom_point(alpha = 0.3) + 
-  #theme() +
+  krplot +
   stat_smooth(method=lm) +
   scale_x_log10(labels = scales::comma,
                      n.breaks = 8,
@@ -461,7 +465,7 @@ ggsave("genexumi", plot = genexumi, device = "pdf")
 complexity <- metadata %>%
   ggplot(aes(x=log10GenesPerUMI, fill=timepoint)) +
   geom_density(alpha = 0.4) +
-  #theme() +
+  krplot +
   scale_x_continuous(expand=c(0,0))+
   scale_y_continuous(expand=c(0,0)) +
   ggtitle("Complexity score") +
@@ -673,7 +677,7 @@ chronRdYlBu_palette <- c("#d73027",
                          "#fee090")
 
 n + scale_fill_manual(values = chronRdYlBu_palette) + DarkTheme() + guides(fill="none")
-ggsave("nCells", plot = n, device = "pdf")
+ggsave("nCells_before_after_filtering", plot = n, device = "pdf")
 
 nf <- hr.merged.kg.f %>%
   ggplot(aes(x=timepoint, fill=timepoint)) +
